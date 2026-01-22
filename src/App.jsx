@@ -16,6 +16,12 @@ const signupInitialForm = {
   rol: '',
 };
 
+const resetInitialForm = {
+  email: '',
+  code: '',
+  password: '',
+};
+
 const usuarioPattern = /^[a-zA-Z0-9_.]+$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -31,6 +37,8 @@ export default function App() {
   const [view, setView] = useState('login');
   const [loginForm, setLoginForm] = useState(loginInitialForm);
   const [signupForm, setSignupForm] = useState(signupInitialForm);
+  const [resetForm, setResetForm] = useState(resetInitialForm);
+  const [resetStep, setResetStep] = useState('request');
   const [errors, setErrors] = useState({});
   const [status, setStatus] = useState({ type: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -76,6 +84,25 @@ export default function App() {
     );
   }, [signupForm, passwordChecks, isAdmin]);
 
+  const isResetValid = useMemo(() => {
+    const emailValid =
+      resetForm.email.trim().length > 0 &&
+      resetForm.email.trim().length <= 150 &&
+      emailPattern.test(resetForm.email.trim());
+    const codeValid = resetForm.code.trim().length > 0;
+    const passwordValid = resetForm.password.length >= 8;
+
+    if (resetStep === 'request') {
+      return emailValid;
+    }
+
+    if (resetStep === 'verify') {
+      return emailValid && codeValid;
+    }
+
+    return emailValid && codeValid && passwordValid;
+  }, [resetForm, resetStep]);
+
   const handleLoginChange = (event) => {
     const { name, value } = event.target;
     setLoginForm((prev) => ({ ...prev, [name]: value }));
@@ -84,6 +111,11 @@ export default function App() {
   const handleSignupChange = (event) => {
     const { name, value } = event.target;
     setSignupForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleResetChange = (event) => {
+    const { name, value } = event.target;
+    setResetForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleAdminToggle = (event) => {
@@ -144,6 +176,26 @@ export default function App() {
 
     if (isAdmin && !signupForm.rol) {
       nextErrors.rol = 'Selecciona un rol para el nuevo usuario.';
+    }
+
+    setErrors(nextErrors);
+    return Object.keys(nextErrors).length === 0;
+  };
+
+  const validateReset = () => {
+    const nextErrors = {};
+    const email = resetForm.email.trim();
+
+    if (email.length === 0 || email.length > 150 || !emailPattern.test(email)) {
+      nextErrors.email = 'Ingresa un correo válido (máximo 150 caracteres).';
+    }
+
+    if (resetStep !== 'request' && resetForm.code.trim().length === 0) {
+      nextErrors.code = 'Ingresa el código que recibiste por correo.';
+    }
+
+    if (resetStep === 'confirm' && resetForm.password.length < 8) {
+      nextErrors.password = 'La nueva contraseña debe tener mínimo 8 caracteres.';
     }
 
     setErrors(nextErrors);
@@ -266,6 +318,83 @@ export default function App() {
     }
   };
 
+  const handleResetSubmit = async (event) => {
+    event.preventDefault();
+    setStatus({ type: '', message: '' });
+
+    if (!validateReset()) {
+      return;
+    }
+
+    if (!API_BASE_URL) {
+      setStatus({
+        type: 'error',
+        message: 'Configura VITE_API_BASE_URL en tu archivo .env.',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    const endpointByStep = {
+      request: '/auth/password-reset/request',
+      verify: '/auth/password-reset/verify',
+      confirm: '/auth/password-reset/confirm',
+    };
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}${endpointByStep[resetStep]}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            email: resetForm.email.trim(),
+            code: resetStep !== 'request' ? resetForm.code.trim() : undefined,
+            password: resetStep === 'confirm' ? resetForm.password : undefined,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'No fue posible continuar.');
+      }
+
+      if (resetStep === 'request') {
+        setStatus({
+          type: 'success',
+          message: 'Te enviamos un código al correo indicado.',
+        });
+        setResetStep('verify');
+      } else if (resetStep === 'verify') {
+        setStatus({
+          type: 'success',
+          message: 'Código verificado. Ahora crea tu nueva contraseña.',
+        });
+        setResetStep('confirm');
+      } else {
+        setStatus({
+          type: 'success',
+          message: 'Contraseña actualizada. Ya puedes iniciar sesión.',
+        });
+        setResetForm(resetInitialForm);
+        setResetStep('request');
+        setView('login');
+      }
+    } catch (error) {
+      setStatus({
+        type: 'error',
+        message: error?.message || 'Ocurrió un error inesperado.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
   return (
     <main className="container">
       <section className="card">
@@ -277,11 +406,18 @@ export default function App() {
               día.
             </p>
           </>
-        ) : (
+        ) : view === 'signup' ? (
           <>
             <h1 className="form-title">Crea tu cuenta en Gastómetro</h1>
             <p className="form-subtitle">
               Regístrate para gestionar tus gastos y mantener tus finanzas al día.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="form-title">Recupera tu contraseña</h1>
+            <p className="form-subtitle">
+              Sigue los pasos para restablecer tu acceso a Gastómetro.
             </p>
           </>
         )}
@@ -359,8 +495,23 @@ export default function App() {
                 Regístrate
               </button>
             </div>
+            <div className="text-center">
+              <button
+                className="link-button"
+                type="button"
+                onClick={() => {
+                  setView('reset');
+                  setResetForm(resetInitialForm);
+                  setResetStep('request');
+                  setErrors({});
+                  setStatus({ type: '', message: '' });
+                }}
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            </div>
           </form>
-        ) : (
+        ) : view === 'signup' ? (
           <form onSubmit={handleSignupSubmit} className="form">
             <div className="input-wrapper">
               <label className="label" htmlFor="nombre_apellido">
@@ -527,6 +678,98 @@ export default function App() {
                 type="button"
                 onClick={() => {
                   setView('login');
+                  setErrors({});
+                  setStatus({ type: '', message: '' });
+                }}
+              >
+                Volver a iniciar sesión
+              </button>
+            </div>
+          </form>
+        ) : (
+          <form onSubmit={handleResetSubmit} className="form">
+            <div className="input-wrapper">
+              <label className="label" htmlFor="reset_email">
+                Correo electrónico
+              </label>
+              <input
+                id="reset_email"
+                name="email"
+                type="email"
+                placeholder="correo@ejemplo.com"
+                value={resetForm.email}
+                onChange={handleResetChange}
+                autoComplete="email"
+                required
+              />
+              {errors.email ? (
+                <span className="field-error">{errors.email}</span>
+              ) : null}
+            </div>
+
+            {resetStep !== 'request' ? (
+              <div className="input-wrapper">
+                <label className="label" htmlFor="reset_code">
+                  Código de verificación
+                </label>
+                <input
+                  id="reset_code"
+                  name="code"
+                  type="text"
+                  placeholder="Ingresa el código"
+                  value={resetForm.code}
+                  onChange={handleResetChange}
+                  required
+                />
+                {errors.code ? (
+                  <span className="field-error">{errors.code}</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            {resetStep === 'confirm' ? (
+              <div className="input-wrapper">
+                <label className="label" htmlFor="reset_password">
+                  Nueva contraseña
+                </label>
+                <input
+                  id="reset_password"
+                  name="password"
+                  type="password"
+                  placeholder="Mínimo 8 caracteres"
+                  value={resetForm.password}
+                  onChange={handleResetChange}
+                  autoComplete="new-password"
+                  required
+                />
+                {errors.password ? (
+                  <span className="field-error">{errors.password}</span>
+                ) : null}
+              </div>
+            ) : null}
+
+            <button
+              className="btn-primary"
+              type="submit"
+              disabled={!isResetValid || isSubmitting}
+            >
+              {isSubmitting
+                ? 'Procesando...'
+                : resetStep === 'request'
+                  ? 'Enviar código'
+                  : resetStep === 'verify'
+                    ? 'Verificar código'
+                    : 'Actualizar contraseña'}
+            </button>
+
+            <div className="text-center">
+              <button
+                className="link-button"
+                type="button"
+                onClick={() => {
+                  setView('login');
+                  setResetForm(resetInitialForm);
+                  setResetStep('request');
                   setErrors({});
                   setStatus({ type: '', message: '' });
                 }}
