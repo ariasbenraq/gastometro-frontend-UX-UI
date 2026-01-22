@@ -68,6 +68,7 @@ const buildYearOptions = (currentYear) =>
 
 export default function Dashboard() {
   const { logout, user } = useAuth();
+  const isAdmin = user?.rol === 'ADMIN' || user?.role === 'ADMIN';
   const [dashboardData, setDashboardData] = useState(fallbackDashboardData);
   const [dashboardStatus, setDashboardStatus] = useState({
     type: '',
@@ -80,11 +81,39 @@ export default function Dashboard() {
       month: now.getMonth() + 1,
       topLimit: 3,
       latestLimit: 3,
+      userScope: 'self',
+      userId: '',
     };
   });
 
   const userLabel =
     user?.nombre_apellido || user?.usuario || user?.email || 'Usuario actual';
+  const userId = user?.id || user?.usuario || user?.email || '';
+
+  useEffect(() => {
+    setDashboardFilters((prev) => {
+      if (isAdmin) {
+        if (prev.userScope !== 'self') {
+          return prev;
+        }
+        return {
+          ...prev,
+          userScope: 'global',
+          userId: '',
+        };
+      }
+
+      if (prev.userScope === 'self' && prev.userId === userId) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        userScope: 'self',
+        userId,
+      };
+    });
+  }, [isAdmin, userId]);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -125,6 +154,23 @@ export default function Dashboard() {
     setDashboardFilters((prev) => ({
       ...prev,
       [name]: Number(value),
+    }));
+  };
+
+  const userOptions = useMemo(() => {
+    const options = [{ value: 'global', label: 'Global' }];
+    if (userId) {
+      options.push({ value: userId, label: userLabel });
+    }
+    return options;
+  }, [userId, userLabel]);
+
+  const handleUserSelection = (event) => {
+    const value = event.target.value;
+    setDashboardFilters((prev) => ({
+      ...prev,
+      userScope: value === 'global' ? 'global' : 'user',
+      userId: value === 'global' ? '' : value,
     }));
   };
 
@@ -181,6 +227,38 @@ export default function Dashboard() {
             </label>
           </div>
         </div>
+        {isAdmin ? (
+          <div className="filter-card">
+            <div className="filter-header">
+              <span className="filter-label">Usuario</span>
+              <span className="filter-value">
+                {dashboardFilters.userScope === 'global'
+                  ? 'Global'
+                  : userLabel}
+              </span>
+            </div>
+            <div className="filter-controls">
+              <label className="filter-control">
+                <span>Selecciona</span>
+                <select
+                  name="userScope"
+                  value={
+                    dashboardFilters.userScope === 'global'
+                      ? 'global'
+                      : dashboardFilters.userId || 'global'
+                  }
+                  onChange={handleUserSelection}
+                >
+                  {userOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {dashboardStatus.message ? (

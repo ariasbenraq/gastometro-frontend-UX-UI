@@ -3,9 +3,12 @@ import { createContext, useCallback, useMemo, useState } from 'react';
 export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
-  const [authState, setAuthState] = useState({
-    isAuthenticated: Boolean(localStorage.getItem('accessToken')),
-    user: null,
+  const [authState, setAuthState] = useState(() => {
+    const storedUser = localStorage.getItem('authUser');
+    return {
+      isAuthenticated: Boolean(localStorage.getItem('accessToken')),
+      user: storedUser ? JSON.parse(storedUser) : null,
+    };
   });
 
   const login = useCallback(({ accessToken, refreshToken, user }) => {
@@ -17,6 +20,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('refreshToken', refreshToken);
     }
 
+    if (user) {
+      localStorage.setItem('authUser', JSON.stringify(user));
+    }
+
     setAuthState({
       isAuthenticated: true,
       user: user || null,
@@ -26,6 +33,7 @@ export const AuthProvider = ({ children }) => {
   const logout = useCallback(() => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    localStorage.removeItem('authUser');
     setAuthState({ isAuthenticated: false, user: null });
   }, []);
 
