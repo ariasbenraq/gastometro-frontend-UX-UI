@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-const API_BASE_URL = 'http://192.168.18.10:4000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 const initialForm = {
   usuario: '',
@@ -44,6 +44,14 @@ export default function App() {
     setStatus({ type: '', message: '' });
 
     if (!validate()) {
+      return;
+    }
+
+    if (!API_BASE_URL) {
+      setStatus({
+        type: 'error',
+        message: 'Configura VITE_API_BASE_URL en tu archivo .env.',
+      });
       return;
     }
 
