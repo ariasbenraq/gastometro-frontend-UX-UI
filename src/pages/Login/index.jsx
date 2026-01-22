@@ -62,7 +62,7 @@ export default function Login({ onNavigate, redirectMessage }) {
       login({
         accessToken: data?.accessToken,
         refreshToken: data?.refreshToken,
-        user: data?.user || null,
+        user: data?.user || { usuario: form.usuario.trim() },
       });
       setStatus({ type: 'success', message: 'Inicio de sesión correcto.' });
       setForm(loginInitialForm);

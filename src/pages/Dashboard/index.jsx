@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchDashboardSummary } from '../../api/dashboardApi';
 import { useAuth } from '../../hooks/useAuth';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency } from '../../utils/formatters';
 
 const fallbackDashboardData = {
   totals: {
@@ -48,19 +48,43 @@ const fallbackDashboardData = {
   ],
 };
 
-export default function Dashboard({ onNavigate }) {
-  const { logout } = useAuth();
+const MONTH_OPTIONS = [
+  { value: 1, label: 'Enero' },
+  { value: 2, label: 'Febrero' },
+  { value: 3, label: 'Marzo' },
+  { value: 4, label: 'Abril' },
+  { value: 5, label: 'Mayo' },
+  { value: 6, label: 'Junio' },
+  { value: 7, label: 'Julio' },
+  { value: 8, label: 'Agosto' },
+  { value: 9, label: 'Septiembre' },
+  { value: 10, label: 'Octubre' },
+  { value: 11, label: 'Noviembre' },
+  { value: 12, label: 'Diciembre' },
+];
+
+const buildYearOptions = (currentYear) =>
+  Array.from({ length: 7 }, (_, index) => currentYear - 3 + index);
+
+export default function Dashboard() {
+  const { logout, user } = useAuth();
   const [dashboardData, setDashboardData] = useState(fallbackDashboardData);
   const [dashboardStatus, setDashboardStatus] = useState({
     type: '',
     message: '',
   });
-  const [dashboardFilters] = useState({
-    year: new Date().getFullYear(),
-    month: new Date().getMonth() + 1,
-    topLimit: 3,
-    latestLimit: 3,
+  const [dashboardFilters, setDashboardFilters] = useState(() => {
+    const now = new Date();
+    return {
+      year: now.getFullYear(),
+      month: now.getMonth() + 1,
+      topLimit: 3,
+      latestLimit: 3,
+    };
   });
+
+  const userLabel =
+    user?.nombre_apellido || user?.usuario || user?.email || 'Usuario actual';
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -91,6 +115,19 @@ export default function Dashboard({ onNavigate }) {
     [dashboardData.gastosByMonth],
   );
 
+  const yearOptions = useMemo(
+    () => buildYearOptions(new Date().getFullYear()),
+    [],
+  );
+
+  const handleFilterChange = (event) => {
+    const { name, value } = event.target;
+    setDashboardFilters((prev) => ({
+      ...prev,
+      [name]: Number(value),
+    }));
+  };
+
   return (
     <section className="dashboard">
       <header className="dashboard-header">
@@ -98,40 +135,51 @@ export default function Dashboard({ onNavigate }) {
           <p className="dashboard-eyebrow">Bienvenido</p>
           <h1 className="dashboard-title">Tablero</h1>
         </div>
-        <div className="dashboard-actions">
-          <button className="btn-secondary" type="button" onClick={logout}>
-            Cerrar sesión
-          </button>
-          <button
-            className="btn-secondary"
-            type="button"
-            onClick={() => onNavigate('login')}
-          >
-            Volver a acceso
-          </button>
-        </div>
       </header>
 
       <div className="dashboard-filters">
-        <div className="filter-field">
-          <span className="filter-label">Año</span>
-          <span className="filter-value">{dashboardFilters.year}</span>
-        </div>
-        <div className="filter-field">
-          <span className="filter-label">Mes</span>
-          <span className="filter-value">{dashboardFilters.month}</span>
-        </div>
-        <div className="filter-field">
-          <span className="filter-label">Top</span>
-          <span className="filter-value">
-            {dashboardFilters.topLimit} distritos
-          </span>
-        </div>
-        <div className="filter-field">
-          <span className="filter-label">Últimos</span>
-          <span className="filter-value">
-            {dashboardFilters.latestLimit} gastos
-          </span>
+        <div className="filter-card">
+          <div className="filter-header">
+            <span className="filter-label">Periodo</span>
+            <span className="filter-value">
+              {dashboardFilters.year} ·{' '}
+              {
+                MONTH_OPTIONS.find(
+                  (option) => option.value === dashboardFilters.month,
+                )?.label
+              }
+            </span>
+          </div>
+          <div className="filter-controls">
+            <label className="filter-control">
+              <span>Año</span>
+              <select
+                name="year"
+                value={dashboardFilters.year}
+                onChange={handleFilterChange}
+              >
+                {yearOptions.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="filter-control">
+              <span>Mes</span>
+              <select
+                name="month"
+                value={dashboardFilters.month}
+                onChange={handleFilterChange}
+              >
+                {MONTH_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </div>
       </div>
 
@@ -150,18 +198,22 @@ export default function Dashboard({ onNavigate }) {
         <article className="metric-card">
           <p>Ingresos</p>
           <h2>{formatCurrency(dashboardData.totals.totalIngresos)}</h2>
+          <span className="metric-user">Usuario: {userLabel}</span>
         </article>
         <article className="metric-card">
           <p>Gastos</p>
           <h2>{formatCurrency(dashboardData.totals.totalGastos)}</h2>
+          <span className="metric-user">Usuario: {userLabel}</span>
         </article>
         <article className="metric-card">
           <p>Movilidades</p>
           <h2>{dashboardData.totals.totalMovilidades}</h2>
+          <span className="metric-user">Usuario: {userLabel}</span>
         </article>
         <article className="metric-card highlight">
           <p>Balance</p>
           <h2>{formatCurrency(dashboardData.totals.balance)}</h2>
+          <span className="metric-user">Usuario: {userLabel}</span>
         </article>
       </section>
 
@@ -192,46 +244,11 @@ export default function Dashboard({ onNavigate }) {
         </div>
       </section>
 
-      <section className="dashboard-grid">
-        <article className="card dashboard-panel">
-          <div className="panel-header">
-            <h3>Últimos gastos</h3>
-            <span>Movilidades</span>
-          </div>
-          <ul className="panel-list">
-            {dashboardData.latestGastos.map((item) => (
-              <li key={item.id}>
-                <div>
-                  <strong>{item.categoria}</strong>
-                  <span>{item.descripcion}</span>
-                </div>
-                <div className="panel-meta">
-                  <strong>{formatCurrency(item.monto)}</strong>
-                  <small>{formatDate(item.fecha)}</small>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </article>
-
-        <article className="card dashboard-panel">
-          <div className="panel-header">
-            <h3>Top distritos</h3>
-            <span>Ranking mensual</span>
-          </div>
-          <ul className="panel-list">
-            {dashboardData.topDistritos.map((item, index) => (
-              <li key={item.distrito}>
-                <div className="district">
-                  <span className="district-rank">{index + 1}</span>
-                  <strong>{item.distrito}</strong>
-                </div>
-                <strong>{formatCurrency(item.monto)}</strong>
-              </li>
-            ))}
-          </ul>
-        </article>
-      </section>
+      <footer className="dashboard-footer">
+        <button className="btn-secondary" type="button" onClick={logout}>
+          Cerrar sesión
+        </button>
+      </footer>
     </section>
   );
 }

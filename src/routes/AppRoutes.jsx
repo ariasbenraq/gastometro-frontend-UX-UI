@@ -69,9 +69,7 @@ export default function AppRoutes() {
         </section>
       ) : null}
 
-      {route === 'dashboard' ? (
-        <Dashboard onNavigate={handleNavigate} />
-      ) : null}
+      {route === 'dashboard' ? <Dashboard /> : null}
       {route === 'movilidad-create' ? <MovilidadCreate /> : null}
       {route === 'ingreso-create' ? <IngresoCreate /> : null}
       {route === 'movilidad-list' ? <MovilidadList /> : null}
