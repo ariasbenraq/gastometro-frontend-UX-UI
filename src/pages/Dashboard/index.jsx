@@ -76,6 +76,20 @@ const MONTH_LABELS = MONTH_OPTIONS.reduce((acc, option) => {
   return acc;
 }, {});
 
+const normalizeTopDistritos = (items = []) =>
+  items.map((item, index) => ({
+    id: item.id ?? `${item.nombre || 'distrito'}-${index}`,
+    nombre: item.nombre || item.distrito || 'Distrito',
+    total: Number(
+      item.total ??
+        item.monto ??
+        item.totalGastos ??
+        item.totalMonto ??
+        item.total_movilidad ??
+        0,
+    ),
+  }));
+
 const buildYearOptions = (currentYear) =>
   Array.from({ length: 7 }, (_, index) => currentYear - 3 + index);
 
@@ -175,7 +189,7 @@ export default function Dashboard() {
         setDashboardData({
           totals,
           latestMovilidades: summary?.latestMovilidades || [],
-          topDistritos: summary?.topDistritos || [],
+          topDistritos: normalizeTopDistritos(summary?.topDistritos || []),
           movilidadesByMonth: summaryByYear?.movilidadesByMonth || [],
         });
       } catch (error) {
