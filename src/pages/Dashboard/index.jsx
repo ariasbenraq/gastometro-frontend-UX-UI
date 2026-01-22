@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import { fetchBalanceTotals } from '../../api/balanceApi';
 import { fetchDashboardSummary } from '../../api/dashboardApi';
 import { fetchUsuarios } from '../../api/usuariosApi';
 import { useAuth } from '../../hooks/useAuth';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 
 const fallbackDashboardData = {
   totals: {
@@ -11,41 +12,47 @@ const fallbackDashboardData = {
     totalMovilidades: 48,
     balance: 12500,
   },
-  latestGastos: [
+  latestMovilidades: [
     {
       id: 'mov-1001',
-      categoria: 'Combustible',
-      descripcion: 'Carga semanal',
-      monto: 48.5,
       fecha: '2024-06-02',
+      motivo: 'Combustible',
+      detalle: 'Carga semanal',
+      monto: 48.5,
     },
     {
       id: 'mov-1002',
-      categoria: 'Peajes',
-      descripcion: 'Ruta Interurbana',
-      monto: 12.75,
       fecha: '2024-06-01',
+      motivo: 'Peajes',
+      detalle: 'Ruta Interurbana',
+      monto: 12.75,
     },
     {
       id: 'mov-1003',
-      categoria: 'Mantenimiento',
-      descripcion: 'Cambio de aceite',
-      monto: 90.0,
       fecha: '2024-05-29',
+      motivo: 'Mantenimiento',
+      detalle: 'Cambio de aceite',
+      monto: 90.0,
     },
   ],
   topDistritos: [
-    { distrito: 'Miraflores', monto: 4200 },
-    { distrito: 'San Isidro', monto: 3800 },
-    { distrito: 'Barranco', monto: 2900 },
+    { id: 1, nombre: 'Miraflores', total: 4200 },
+    { id: 2, nombre: 'San Isidro', total: 3800 },
+    { id: 3, nombre: 'Barranco', total: 2900 },
   ],
-  gastosByMonth: [
-    { mes: 'Ene', monto: 950 },
-    { mes: 'Feb', monto: 1200 },
-    { mes: 'Mar', monto: 860 },
-    { mes: 'Abr', monto: 1460 },
-    { mes: 'May', monto: 1320 },
-    { mes: 'Jun', monto: 980 },
+  movilidadesByMonth: [
+    { month: 1, total: 950 },
+    { month: 2, total: 1200 },
+    { month: 3, total: 860 },
+    { month: 4, total: 1460 },
+    { month: 5, total: 1320 },
+    { month: 6, total: 980 },
+    { month: 7, total: 1110 },
+    { month: 8, total: 1050 },
+    { month: 9, total: 990 },
+    { month: 10, total: 1370 },
+    { month: 11, total: 910 },
+    { month: 12, total: 1180 },
   ],
 };
 
@@ -63,6 +70,11 @@ const MONTH_OPTIONS = [
   { value: 11, label: 'Noviembre' },
   { value: 12, label: 'Diciembre' },
 ];
+
+const MONTH_LABELS = MONTH_OPTIONS.reduce((acc, option) => {
+  acc[option.value] = option.label;
+  return acc;
+}, {});
 
 const buildYearOptions = (currentYear) =>
   Array.from({ length: 7 }, (_, index) => currentYear - 3 + index);
@@ -82,8 +94,7 @@ export default function Dashboard() {
       year: now.getFullYear(),
       month: now.getMonth() + 1,
       topLimit: 3,
-      latestLimit: 3,
-      userScope: 'self',
+      latestLimit: 5,
       userId: '',
     };
   });
@@ -95,23 +106,21 @@ export default function Dashboard() {
   useEffect(() => {
     setDashboardFilters((prev) => {
       if (isAdmin) {
-        if (prev.userScope !== 'self') {
+        if (prev.userId === '') {
           return prev;
         }
         return {
           ...prev,
-          userScope: 'global',
           userId: '',
         };
       }
 
-      if (prev.userScope === 'self' && prev.userId === userId) {
+      if (prev.userId === userId) {
         return prev;
       }
 
       return {
         ...prev,
-        userScope: 'self',
         userId,
       };
     });
@@ -145,9 +154,30 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchDashboard = async () => {
       setDashboardStatus({ type: '', message: '' });
+      const userIdParam = isAdmin ? dashboardFilters.userId || undefined : undefined;
+
       try {
-        const data = await fetchDashboardSummary(dashboardFilters);
-        setDashboardData(data);
+        const [totals, summary, summaryByYear] = await Promise.all([
+          fetchBalanceTotals({ userId: userIdParam }),
+          fetchDashboardSummary({
+            year: dashboardFilters.year,
+            month: dashboardFilters.month,
+            topLimit: dashboardFilters.topLimit,
+            latestLimit: dashboardFilters.latestLimit,
+            userId: userIdParam,
+          }),
+          fetchDashboardSummary({
+            year: dashboardFilters.year,
+            userId: userIdParam,
+          }),
+        ]);
+
+        setDashboardData({
+          totals,
+          latestMovilidades: summary?.latestMovilidades || [],
+          topDistritos: summary?.topDistritos || [],
+          movilidadesByMonth: summaryByYear?.movilidadesByMonth || [],
+        });
       } catch (error) {
         setDashboardStatus({
           type: 'warning',
@@ -160,15 +190,27 @@ export default function Dashboard() {
     };
 
     fetchDashboard();
-  }, [dashboardFilters]);
+  }, [dashboardFilters, isAdmin]);
+
+  const filteredMovilidades = useMemo(() => {
+    const monthPivot = dashboardFilters.month;
+    const start = monthPivot <= 6 ? 1 : 7;
+    const end = start + 5;
+    return (dashboardData.movilidadesByMonth || [])
+      .filter((item) => item.month >= start && item.month <= end)
+      .map((item) => ({
+        ...item,
+        label: MONTH_LABELS[item.month] || `Mes ${item.month}`,
+      }));
+  }, [dashboardData.movilidadesByMonth, dashboardFilters.month]);
 
   const maxGastosValue = useMemo(
     () =>
       Math.max(
-        ...dashboardData.gastosByMonth.map((item) => item.monto),
+        ...filteredMovilidades.map((item) => item.total),
         1,
       ),
-    [dashboardData.gastosByMonth],
+    [filteredMovilidades],
   );
 
   const yearOptions = useMemo(
@@ -194,7 +236,7 @@ export default function Dashboard() {
       }
     });
     if (options.length === 1 && userId) {
-      options.push({ value: userId, label: userLabel });
+      options.push({ value: String(userId), label: userLabel });
     }
     return options;
   }, [users, userId, userLabel]);
@@ -203,10 +245,24 @@ export default function Dashboard() {
     const value = event.target.value;
     setDashboardFilters((prev) => ({
       ...prev,
-      userScope: value === 'global' ? 'global' : 'user',
       userId: value === 'global' ? '' : value,
     }));
   };
+
+  const selectedUserLabel = useMemo(() => {
+    if (!isAdmin) {
+      return userLabel;
+    }
+
+    if (!dashboardFilters.userId) {
+      return 'Global';
+    }
+
+    return (
+      userOptions.find((option) => option.value === dashboardFilters.userId)
+        ?.label || userLabel
+    );
+  }, [dashboardFilters.userId, isAdmin, userLabel, userOptions]);
 
   return (
     <section className="dashboard">
@@ -265,22 +321,14 @@ export default function Dashboard() {
           <div className="filter-card">
             <div className="filter-header">
               <span className="filter-label">Usuario</span>
-              <span className="filter-value">
-                {dashboardFilters.userScope === 'global'
-                  ? 'Global'
-                  : userLabel}
-              </span>
+              <span className="filter-value">{selectedUserLabel}</span>
             </div>
             <div className="filter-controls">
               <label className="filter-control">
                 <span>Selecciona</span>
                 <select
                   name="userScope"
-                  value={
-                    dashboardFilters.userScope === 'global'
-                      ? 'global'
-                      : dashboardFilters.userId || 'global'
-                  }
+                  value={dashboardFilters.userId || 'global'}
                   onChange={handleUserSelection}
                 >
                   {userOptions.map((option) => (
@@ -310,22 +358,22 @@ export default function Dashboard() {
         <article className="metric-card">
           <p>Ingresos</p>
           <h2>{formatCurrency(dashboardData.totals.totalIngresos)}</h2>
-          <span className="metric-user">Usuario: {userLabel}</span>
+          <span className="metric-user">Usuario: {selectedUserLabel}</span>
         </article>
         <article className="metric-card">
           <p>Gastos</p>
           <h2>{formatCurrency(dashboardData.totals.totalGastos)}</h2>
-          <span className="metric-user">Usuario: {userLabel}</span>
+          <span className="metric-user">Usuario: {selectedUserLabel}</span>
         </article>
         <article className="metric-card">
           <p>Movilidades</p>
           <h2>{dashboardData.totals.totalMovilidades}</h2>
-          <span className="metric-user">Usuario: {userLabel}</span>
+          <span className="metric-user">Usuario: {selectedUserLabel}</span>
         </article>
         <article className="metric-card highlight">
           <p>Balance</p>
           <h2>{formatCurrency(dashboardData.totals.balance)}</h2>
-          <span className="metric-user">Usuario: {userLabel}</span>
+          <span className="metric-user">Usuario: {selectedUserLabel}</span>
         </article>
       </section>
 
@@ -337,23 +385,64 @@ export default function Dashboard() {
           </div>
           <span className="chart-total">
             {formatCurrency(
-              dashboardData.gastosByMonth.reduce(
-                (sum, item) => sum + item.monto,
+              filteredMovilidades.reduce(
+                (sum, item) => sum + item.total,
                 0,
               ),
             )}
           </span>
         </div>
         <div className="chart-bars">
-          {dashboardData.gastosByMonth.map((item) => (
-            <div key={item.mes} className="chart-bar">
+          {filteredMovilidades.map((item) => (
+            <div key={item.month} className="chart-bar">
               <span
-                style={{ height: `${(item.monto / maxGastosValue) * 100}%` }}
+                style={{ height: `${(item.total / maxGastosValue) * 100}%` }}
               />
-              <small>{item.mes}</small>
+              <small>{item.label}</small>
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="dashboard-grid">
+        <article className="card dashboard-panel">
+          <div className="panel-header">
+            <h3>Últimas movilidades</h3>
+            <span>Mes seleccionado</span>
+          </div>
+          <ul className="panel-list">
+            {dashboardData.latestMovilidades.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <strong>{item.motivo}</strong>
+                  <span>{item.detalle}</span>
+                </div>
+                <div className="panel-meta">
+                  <strong>{formatCurrency(item.monto)}</strong>
+                  <small>{formatDate(item.fecha)}</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </article>
+
+        <article className="card dashboard-panel">
+          <div className="panel-header">
+            <h3>Top distritos</h3>
+            <span>Ranking mensual</span>
+          </div>
+          <ul className="panel-list">
+            {dashboardData.topDistritos.map((item, index) => (
+              <li key={item.id || item.nombre || index}>
+                <div className="district">
+                  <span className="district-rank">{index + 1}</span>
+                  <strong>{item.nombre}</strong>
+                </div>
+                <strong>{formatCurrency(item.total)}</strong>
+              </li>
+            ))}
+          </ul>
+        </article>
       </section>
 
       <footer className="dashboard-footer">

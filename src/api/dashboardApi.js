@@ -5,23 +5,19 @@ export const fetchDashboardSummary = ({
   month,
   topLimit,
   latestLimit,
-  userScope,
   userId,
-}) => {
+} = {}) => {
   const params = new URLSearchParams({
-    year: String(year),
-    month: String(month),
-    topLimit: String(topLimit),
-    latestLimit: String(latestLimit),
+    ...(year ? { year: String(year) } : {}),
+    ...(month ? { month: String(month) } : {}),
+    ...(topLimit ? { topLimit: String(topLimit) } : {}),
+    ...(latestLimit ? { latestLimit: String(latestLimit) } : {}),
   });
-
-  if (userScope) {
-    params.append('userScope', userScope);
-  }
 
   if (userId) {
     params.append('userId', String(userId));
   }
 
-  return get(`/dashboard/summary?${params.toString()}`);
+  const query = params.toString();
+  return get(`/dashboard/summary${query ? `?${query}` : ''}`);
 };
