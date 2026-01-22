@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { fetchDashboardSummary } from '../../api/dashboardApi';
+import { fetchUsuarios } from '../../api/usuariosApi';
 import { useAuth } from '../../hooks/useAuth';
 import { formatCurrency } from '../../utils/formatters';
 
@@ -74,6 +75,7 @@ export default function Dashboard() {
     type: '',
     message: '',
   });
+  const [users, setUsers] = useState([]);
   const [dashboardFilters, setDashboardFilters] = useState(() => {
     const now = new Date();
     return {
@@ -114,6 +116,31 @@ export default function Dashboard() {
       };
     });
   }, [isAdmin, userId]);
+
+  useEffect(() => {
+    if (!isAdmin) {
+      setUsers([]);
+      return;
+    }
+
+    const fetchUsers = async () => {
+      try {
+        const data = await fetchUsuarios();
+        const list = Array.isArray(data) ? data : data?.data || [];
+        setUsers(list);
+      } catch (error) {
+        setDashboardStatus({
+          type: 'warning',
+          message:
+            error?.message ||
+            'No fue posible cargar los usuarios, mostramos solo Global.',
+        });
+        setUsers([]);
+      }
+    };
+
+    fetchUsers();
+  }, [isAdmin]);
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -159,11 +186,18 @@ export default function Dashboard() {
 
   const userOptions = useMemo(() => {
     const options = [{ value: 'global', label: 'Global' }];
-    if (userId) {
+    users.forEach((item) => {
+      const id = item.id || item.usuario || item.email;
+      const label = item.nombre_apellido || item.usuario || item.email;
+      if (id && label) {
+        options.push({ value: String(id), label });
+      }
+    });
+    if (options.length === 1 && userId) {
       options.push({ value: userId, label: userLabel });
     }
     return options;
-  }, [userId, userLabel]);
+  }, [users, userId, userLabel]);
 
   const handleUserSelection = (event) => {
     const value = event.target.value;
@@ -298,7 +332,7 @@ export default function Dashboard() {
       <section className="dashboard-chart card">
         <div className="chart-header">
           <div>
-            <h3>Gastos por mes</h3>
+            <h3>Gastos por mes · {dashboardFilters.year}</h3>
             <p>Registro de movilidades</p>
           </div>
           <span className="chart-total">

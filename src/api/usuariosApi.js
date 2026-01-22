@@ -1,3 +1,3 @@
-export const notImplemented = () => {
-  throw new Error('API pendiente de implementación.');
-};
+import { get } from './httpClient';
+
+export const fetchUsuarios = () => get('/usuarios');
